@@ -1,4 +1,8 @@
-Ese es el codigo utilizado para el proyecto para la casa habierta, en la version base se toman en cuenta:
+Este proyecto se encargara de recopilar los datos obtenidos por todos los proyectos del curso, y mostrarlos por una 
+grafica a travez de grafana
+
+Ese es el codigo utilizado para el proyecto para la casa habierta, en la version base, donde solo se usa de ejemplo un proyecto beta llamado
+"sensor" que mide temperatura-Altura-humedad-presion, se toman en cuenta:
 
 Sensor => Esp32
 Gateway y Receptor => heltec wifi lora V3
