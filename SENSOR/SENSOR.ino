@@ -83,5 +83,5 @@ void sendToGateway(String data) {
     Serial.println("Error HTTP: " + String(httpCode));
   }
   
-  http.end();
+  http.end();
 }
