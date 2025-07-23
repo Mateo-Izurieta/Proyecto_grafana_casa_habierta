@@ -5,12 +5,12 @@
 #include <RadioLib.h>
 
 // Configuración WiFi (usar tus credenciales)
-const char* wifiSSID = "Nombre_wifi";
-const char* wifiPassword = "Contra_wifi";
+const char* wifiSSID = "wifiName";
+const char* wifiPassword = "wifiPassword";
 
 // Configuración InfluxDB
-const char* influxServer = "puerto de influxdb via url";
-const char* influxToken = "token de influxDb";
+const char* influxServer = "url influxdb";
+const char* influxToken = "token influxdb";
 
 // Configuración LoRa (debe coincidir con Gateway)
 SX1262 lora = new Module(8, 14, 12, 13);
@@ -62,9 +62,13 @@ void loop() {
     
     // Verificar formato "SENS:temp,hum,pres,alt"
     if (receivedData.startsWith("SENS:")) {
-      String sensorData = receivedData.substring(5);
-      processAndSendData(sensorData);
-    }
+  String sensorData = receivedData.substring(5);
+  processAndSendData(sensorData);
+} else if (receivedData.startsWith("ULTRASONICO:")) {
+  String distData = receivedData.substring(12);
+  processAndSendUltrasonico(distData);
+}
+
     
     // Mostrar calidad de señal
     Serial.print("RSSI: ");
@@ -126,4 +130,20 @@ void sendToInfluxDB(String payload) {
   }
   
   http.end();
+}
+
+void processAndSendUltrasonico(String data) {
+  // Ya no buscamos ninguna coma. El dato es solo la distancia en texto.
+  String distancia = data;
+
+  String payload = "sensores,ubicacion=habitacion,tipo=ULTRASONICO distancia=" + distancia;
+
+
+  Serial.println("Enviando distancia ultrasónica a InfluxDB: " + distancia);
+
+  if (WiFi.status() == WL_CONNECTED) {
+    sendToInfluxDB(payload);
+  } else {
+    Serial.println("WiFi no conectado - Datos no enviados");
+  }
 }

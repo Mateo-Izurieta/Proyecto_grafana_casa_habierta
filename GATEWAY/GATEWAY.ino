@@ -66,31 +66,39 @@ void handleData() {
   String data = server.arg("plain");
   Serial.println("Datos recibidos: " + data);
 
-  // Verificar checksum
+  // Extraer checksum
   int lastComma = data.lastIndexOf(',');
   if (lastComma == -1) {
     server.send(400, "text/plain", "Formato inválido");
     return;
   }
 
-  String payload = data.substring(0, lastComma);
-  int receivedChecksum = data.substring(lastComma+1).toInt();
+  String payloadWithPrefix = data.substring(0, lastComma);
+  int receivedChecksum = data.substring(lastComma + 1).toInt();
 
   // Calcular checksum
   int calculatedChecksum = 0;
-  for (unsigned int i = 0; i < payload.length(); i++) {
-    calculatedChecksum += payload[i];
+  for (unsigned int i = 0; i < payloadWithPrefix.length(); i++) {
+    calculatedChecksum += payloadWithPrefix[i];
   }
 
   if (calculatedChecksum != receivedChecksum) {
     server.send(400, "text/plain", "Checksum inválido");
+    Serial.println("Checksum inválido - DESCARTADO");
     return;
   }
 
-  // Transmitir por LoRa con prefijo
-  String loraMsg = "SENS:" + payload;
+  // Transmitir por LoRa
+  String loraMsg;
+
+  if (payloadWithPrefix.startsWith("ULTRASONICO:")) {
+    loraMsg = payloadWithPrefix;  // Enviar tal cual
+  } else {
+    loraMsg = "SENS:" + payloadWithPrefix;  // Prefijo estándar
+  }
+
   int state = lora.transmit(loraMsg);
-  
+
   if (state == RADIOLIB_ERR_NONE) {
     server.send(200, "text/plain", "OK");
     Serial.println("Enviado por LoRa: " + loraMsg);
@@ -100,6 +108,7 @@ void handleData() {
     Serial.println(state);
   }
 }
+
 
 void loop() {
   server.handleClient();
