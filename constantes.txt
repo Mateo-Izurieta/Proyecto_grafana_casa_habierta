@@ -1,3 +1,14 @@
 modificando ip siempre http://172.20.10.4:8086/api/v2/write?org=mi_org&bucket=sensor_data&precision=s
 windows: lxad_v2UK0BW8y7wWELGlHsszYRB7DUEa5_A49LRTO0ML9nfRh4SAtigMANDE_ThwZxRd1Hfg43OUxsfiThLyA==
 mac: DlEnneHpkl8joG_tPOM32SgO-jQt4WYDXZBVavh0sy4_4OyvZx9tLPV1yhKA8cAZPfpiTD9g4pLD2XEdJyZbtw==
+
+from(bucket: "sensor_data")
+  |> range(start: -1h)
+  |> filter(fn: (r) => r._measurement == "sensores")  //sensores por temperatura/presion/altura/humedad
+
+
+from(bucket: "sensor_data")
+  |> range(start: -1h)
+  |> filter(fn: (r) => r._measurement == "sensores")
+  |> filter(fn: (r) => r.tipo == "ULTRASONICO")
+  |> filter(fn: (r) => r._field == "distancia")
