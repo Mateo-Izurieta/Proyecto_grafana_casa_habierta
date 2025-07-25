@@ -1,6 +1,3 @@
-//SENSOR PROTOTIPO PARA PROYECTO, MEDIDOR DE TEMP-ALT-HUM-PRES
-//ENVIA LOS DATOS POR WIFI AL LORA ENCARGADO DE RECOGER LOS DATOS
-//DE PROYECTOS
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <Adafruit_Sensor.h>
@@ -13,18 +10,81 @@ const char* ssid = "RedSensorIoT";
 const char* password = "sensorpass123";
 const char* gatewayURL = "http://192.168.4.1/data";
 
+String sharedData = "";
+portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+
+// Tarea en núcleo 0: leer datos del sensor
+void taskReadSensor(void *parameter) {
+  while (true) {
+    String data = String(bme.readTemperature(), 1) + "," +
+                  String(bme.readHumidity(), 1) + "," +
+                  String(bme.readPressure() / 100.0F, 1) + "," +
+                  String(bme.readAltitude(SEALEVELPRESSURE_HPA), 1);
+
+    int checksum = 0;
+    for (unsigned int i = 0; i < data.length(); i++) {
+      checksum += data[i];
+    }
+    data += "," + String(checksum);
+
+    // Imprimir datos recopilados
+    Serial.println("[Sensor] Datos recopilados: " + data);
+
+    portENTER_CRITICAL(&mux);
+    sharedData = data;
+    portEXIT_CRITICAL(&mux);
+
+    vTaskDelay(10000 / portTICK_PERIOD_MS);  // Esperar 10 segundos
+  }
+}
+
+// Tarea en núcleo 1: enviar los datos
+void taskSendData(void *parameter) {
+  while (true) {
+    if (WiFi.status() == WL_CONNECTED) {
+      String dataToSend = "";
+
+      portENTER_CRITICAL(&mux);
+      dataToSend = sharedData;
+      portEXIT_CRITICAL(&mux);
+
+      if (dataToSend != "") {
+        HTTPClient http;
+        http.begin(gatewayURL);
+        http.addHeader("Content-Type", "text/plain");
+
+        Serial.println("[Envío] Enviando datos al Gateway: " + dataToSend);
+        int httpCode = http.POST(dataToSend);
+
+        if (httpCode == HTTP_CODE_OK) {
+          Serial.println("[Envío] Envío exitoso");
+        } else {
+          Serial.println("[Envío] Error HTTP: " + String(httpCode));
+        }
+        http.end();
+      }
+    } else {
+      Serial.println("[WiFi] Desconectado. Intentando reconectar...");
+      WiFi.reconnect();
+      delay(2000);
+    }
+
+    vTaskDelay(10000 / portTICK_PERIOD_MS);  // Esperar 10 segundos
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   delay(1000);
 
   if (!bme.begin(0x76)) {
-    Serial.println("¡Error al iniciar BME280!");
-    while(1);
+    Serial.println("[Error] No se detectó el BME280");
+    while (1);
   }
 
   WiFi.begin(ssid, password);
-  Serial.print("Conectando al Gateway");
-  
+  Serial.print("[WiFi] Conectando");
+
   int attempts = 0;
   while (WiFi.status() != WL_CONNECTED && attempts < 20) {
     delay(500);
@@ -33,55 +93,18 @@ void setup() {
   }
 
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("\nError al conectar. Reiniciando...");
+    Serial.println("\n[WiFi] Error al conectar. Reiniciando...");
     delay(2000);
     ESP.restart();
   }
-  
-  Serial.println("\nConectado. IP: " + WiFi.localIP().toString());
+
+  Serial.println("\n[WiFi] Conectado. IP: " + WiFi.localIP().toString());
+
+  // Crear tareas en núcleos distintos
+  xTaskCreatePinnedToCore(taskReadSensor, "LecturaSensor", 4096, NULL, 1, NULL, 0);
+  xTaskCreatePinnedToCore(taskSendData, "EnvioDatos", 4096, NULL, 1, NULL, 1);
 }
 
 void loop() {
-  static unsigned long lastSend = 0;
-  if (millis() - lastSend > 10000) { // Enviar cada 10 segundos
-    lastSend = millis();
-    
-    // Formato: temperatura,humedad,presion,altitud,checksum
-    String sensorData = String(bme.readTemperature(), 1) + "," +
-                       String(bme.readHumidity(), 1) + "," +
-                       String(bme.readPressure() / 100.0F, 1) + "," +
-                       String(bme.readAltitude(SEALEVELPRESSURE_HPA), 1);
-    
-    // Calcular checksum
-    int checksum = 0;
-    for (unsigned int i = 0; i < sensorData.length(); i++) {
-      checksum += sensorData[i];
-    }
-    sensorData += "," + String(checksum);
-
-    sendToGateway(sensorData);
-  }
-}
-
-void sendToGateway(String data) {
-  if (WiFi.status() != WL_CONNECTED) {
-    WiFi.reconnect();
-    delay(2000);
-    return;
-  }
-
-  HTTPClient http;
-  http.begin(gatewayURL);
-  http.addHeader("Content-Type", "text/plain");
-
-  Serial.println("Enviando: " + data);
-  int httpCode = http.POST(data);
-  
-  if (httpCode == HTTP_CODE_OK) {
-    Serial.println("Envío exitoso");
-  } else {
-    Serial.println("Error HTTP: " + String(httpCode));
-  }
-  
-  http.end();
+  // El loop no hace nada, ya que todo corre en tareas
 }
